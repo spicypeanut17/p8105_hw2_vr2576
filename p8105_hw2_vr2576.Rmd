@@ -1,0 +1,281 @@
+---
+title: "P8105 Homework 2"
+author: "Vaiju Raja (vr2576)"
+date: "2024-09-27"
+output: github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load libraries
+library(tidyverse)
+library(janitor)
+library(readr)
+library(readxl)
+library(dplyr)
+library(stringr)
+
+```
+
+
+## Problem 1: NYC Transit
+
+```{r problem1}
+
+# Load the CSV file
+transit_data <- read_csv("NYC_Transit_Subway_Entrance_And_Exit_Data.csv")
+
+# Clean dataset
+transit <- transit_data |>
+  janitor::clean_names() |>
+  select(line, station_name, station_latitude, station_longitude,
+    route1, route2, route3, route4, route5, route6, route7, 
+    route8, route9, route10, route11, entry, vending, entrance_type, ada) |>
+  unite("routes", starts_with("route"), na.rm = TRUE, remove = TRUE, sep = ",") |>
+  mutate(entry = ifelse(entry == "YES", TRUE, FALSE))
+
+head(transit)
+n_rows <- nrow(transit)
+n_cols <- ncol(transit)
+
+
+# How many distinct stations are there?
+distinct_stations <- transit |>
+  distinct(station_name, line) |>
+  nrow()
+
+distinct_stations #465
+
+
+# How many stations are ADA compliant?
+ada_compliant <- transit |>
+  filter(ada == "TRUE") |>
+  distinct(station_name, line) |>
+  nrow()
+
+ada_compliant #84
+
+
+# What proportion of station entrances/exits without vending allow entrance?
+vending_proportion <- transit |>
+  filter(vending == "NO") |>
+  summarize(proportion = mean(entry)) |>
+  pull(proportion) * 100 
+
+vending_proportion #37.7%
+
+
+# Reformat data so that route number and route name are distinct variables
+transit_long <- transit |>
+  separate_rows(routes, sep = ",") |>
+  filter(routes != "")
+
+
+# How many distinct stations serve the A train? 
+a_train_stations <- transit_long |>
+  filter(routes == "A") |>
+  distinct(station_name, line) |>
+  nrow()
+
+a_train_stations #60
+
+
+# Of the stations that serve the A train, how many are ADA compliant?
+ada_compliant_a_train_stations <- transit_long |>
+  filter(routes == "A" & ada == "TRUE") |>
+  distinct(station_name, line) |>
+  nrow()
+
+ada_compliant_a_train_stations #17
+
+
+```
+
+The dataset includes information on various subway stations and their attributes, such as line, station name, geographical coordinates, routes served, entrance type, vending machines, and ADA compliance. After cleaning the data by selecting relevant variables, converting the entry variable to a logical type, and reformatting routes, the resulting dataset has `r n_rows` rows and `r n_cols` columns.
+
+There are a total of `r distinct_stations` distinct subway stations when considering both station names and lines. Of these, `r ada_compliant` stations are ADA-compliant. For station entrances and exits without vending machines, `r vending_proportion`% allow entry. Additionally, `r a_train_stations` distinct stations serve the A train, and of those, `r ada_compliant_a_train_stations` are ADA compliant.
+
+
+
+## Problem 2: Mr. Trash Wheel
+
+```{r problem2}
+
+# Import and clean Mr Trash Wheel data
+mr_trash_wheel <- read_excel(
+  path = "202409 Trash Wheel Collection Data.xlsx",
+  sheet = "Mr. Trash Wheel",
+  skip = 1) |> 
+  clean_names() |>
+  filter(!is.na(dumpster)) |>  # Omit rows without dumpster-specific data
+  select(-starts_with("x")) |>  # Two new columns being created - drop these columns
+  mutate(
+    sports_balls = as.integer(round(sports_balls)),  # Round and convert sports balls
+    trash_wheel = "Mr. Trash Wheel",  # Add a column to track which trash wheel
+    year = as.numeric(year)  # Ensure the year column is of the same type
+  )
+
+
+# Import and clean Professor Trash Wheel data
+professor_trash_wheel <- read_excel(
+  path = "202409 Trash Wheel Collection Data.xlsx",
+  sheet = "Professor Trash Wheel",
+  skip = 1) |> 
+  clean_names() |>
+  filter(!is.na(dumpster)) |>  # Omit rows without dumpster-specific data
+  select(-starts_with("x")) |>  # Two new columns being created - drop these columns
+  mutate(
+    trash_wheel = "Professor Trash Wheel",  # Add a column to track which trash wheel
+    year = as.numeric(year)  # Ensure the year column is of the same type
+  )
+
+
+# Import and clean Gwynnda data
+gwynnda <- read_excel(
+  path = "202409 Trash Wheel Collection Data.xlsx",
+  sheet = "Gwynnda Trash Wheel",
+  skip = 1) |> 
+  clean_names() |>
+  filter(!is.na(dumpster)) |>  # Omit rows without dumpster-specific data
+  select(-starts_with("x")) |>  # Two new columns being created - drop these columns
+  mutate(
+    trash_wheel = "Gwynnda",  # Add a column to track which trash wheel
+    year = as.numeric(year)  # Ensure the year column is of the same type
+  )
+
+
+# Combine the datasets
+combined_trash <- bind_rows(mr_trash_wheel, professor_trash_wheel, gwynnda)
+combined_trash
+
+
+# Example of calculating total weight collected by Professor Trash Wheel
+total_weight_prof_trash_wheel <- combined_trash |> 
+  filter(trash_wheel == "Professor Trash Wheel") |> 
+  summarize(total_weight = sum(weight_tons, na.rm = TRUE))
+
+total_weight_prof_trash_wheel #216
+
+
+# Example of calculating total number of cigarette butts collected by Gwynnda in June 2022
+total_cig_butts_june_2022 <- combined_trash |> 
+  filter(trash_wheel == "Gwynnda", month == "July", year == 2022) |> 
+  summarize(total_cigarette_butts = sum(cigarette_butts, na.rm = TRUE))
+
+total_cig_butts_june_2022 #31090
+
+
+head(combined_trash)
+
+```
+
+The dataset includes information on the trash collected by various trash wheels, including Mr. Trash Wheel, Professor Trash Wheel, and Gwynnda. After cleaning and organizing the data, the resulting dataset contains `r nrow(combined_trash)` observations with key variables such as the dumpster count, weight of trash collected, and specific items like plastic bottles and cigarette butts. In total, Professor Trash Wheel collected `r total_weight_prof_trash_wheel` tons of trash. Additionally, Gwynnda collected `r total_cig_butts_june_2022` cigarette butts in June 2022.
+
+
+
+
+## Problem 3: The Great British Baking Off
+
+```{r problem3}
+
+# Bakers Dataset
+bakers <- read_csv("gbb_datasets/bakers.csv") |>
+  clean_names() |>
+  rename(baker = baker_name)
+str(bakers)
+
+# Extract the last name from the baker's full name
+bakers <- bakers |> 
+  mutate(baker_last_name = word(baker, 2), baker = word(baker, 1))
+
+
+# Bakes Dataset
+bakes <- read_csv("gbb_datasets/bakes.csv") |>
+  clean_names() 
+str(bakes)
+
+
+# Results Dataset
+results <- read_csv("gbb_datasets/results.csv") |> 
+  clean_names() |> 
+  rename(series = x1, episode = x2, baker = x3, technical = x4, result = in_stayed_in_out_eliminated_star_baker_star_baker_winner_series_winner_runner_up_series_runner_up_wd_withdrew) |>  # Rename variables 
+  filter(!is.na(result)) |>  # Remove rows with no result info
+  slice(-1) |>  # Remove the first row
+  mutate(series = as.numeric(series), episode = as.numeric(episode), technical = as.numeric(technical)) # Convert series, technical, & episode to numeric
+str(results)
+
+
+# Viewers Dataset
+# Pivot the dataset to long format
+viewers <- read_csv("gbb_datasets/viewers.csv") |> 
+  clean_names() |> 
+  pivot_longer(cols = starts_with("series"), names_to = "series", values_to = "viewers") |> 
+  mutate(series = as.numeric(str_remove(series, "series_"))) # Convert series to numeric and clean the series name
+str(viewers)
+
+
+
+# Merge Bakers and Bakes Datasets
+bakers_bakes <- left_join(bakers, bakes, by = c("baker", "series"))
+
+# Merge the Bakers and Bakes Dataset with the Results Dataset
+bakers_bakes_results <- left_join(bakers_bakes, results, by = c("baker", "series", "episode"))
+
+# Merge the Bakers, Bakes, & Results Dataset with the Viewers Dataset
+final <- left_join(bakers_bakes_results, viewers, by = c("series", "episode"))
+
+
+# Organize & export the final dataset
+final <- final |> 
+  select(series, episode, baker, baker_last_name, baker_age, baker_occupation, hometown, signature_bake, technical, show_stopper, result, viewers)
+write_csv(final, "final_bake_off_data.csv")
+
+
+# Star Baker & Winner Table for Seasons 5 to 10
+star_bakers_winners <- final |>
+  filter(series >= 5 & series <= 10, result %in% c("STAR BAKER", "WINNER")) |>
+  select(series, episode, baker, result) |>
+  arrange(series, episode)
+
+knitr::kable(star_bakers_winners, caption = "Star Bakers and Winners (Seasons 5-10)")
+
+
+# Average Viewership in Seasons 1 and 5
+avg_views_s1 <- final |> 
+  filter(series == 1) |> 
+  summarize(avg_views = mean(viewers, na.rm = TRUE))
+avg_views_s5 <- final |> 
+  filter(series == 5) |> 
+  summarize(avg_views = mean(viewers, na.rm = TRUE))
+
+avg_views_s1 #2.72
+avg_views_s5 #9.65
+
+```
+
+**Data Cleaning Process**
+
+The data cleaning process began by importing datasets for bakers, bakes, results, and viewership. One challenge was that the baker names in the bakers dataset contained both first and last names, while the bakes dataset only used first names. To resolve this, I manually matched and merged the datasets by creating a consistent baker identifier across both datasets.
+
+For the results dataset, I removed unnecessary rows (such as the first row) and converted key variables like series and episode into consistent formats to enable successful joins. The cleaned dataset allowed us to merge baker details, bakes, and results into a single dataset, ensuring that every episode's baker performances were appropriately linked with outcomes like elimination or star baker.
+
+I encountered some type mismatches and many-to-many relationships between the series columns across datasets, which were resolved by joining on both baker, series, and episode to avoid duplicate data. Additionally, the viewership dataset required conversion of columns from wide to long format and renaming variables for consistency.
+
+The final dataset combines key information about each baker (age, occupation, hometown), their bakes (signature bakes, showstoppers), and results (eliminations, star baker, series winner). The viewership dataset now shows the viewership for each episode across all seasons. The final dataset has `r nrow(bakers_bakes_results)` observations and includes key variables such as "baker," "series," and "episode." For instance, there are `r n_distinct(bakers_bakes_results$baker)` unique bakers across `r n_distinct(bakers_bakes_results$series)` seasons.
+
+
+
+**Star Bakers and Winners**
+
+Some winners displayed consistent performance by being star bakers multiple times across episodes, which made them more predictable towards the end of the season. Nadiya from Season 6 and Candice from Season 7 won multiple star baker titles and went on to win their respective series, which was more expected.
+In a few seasons, star bakers did not necessarily become the overall winner. For instance, Richard won star baker the most in season 5 but Nancy won the entire season. 
+
+
+
+**Average Viewership**
+
+The average viewership in Season 1 was `r avg_views_s1` million people. The average viewership in Season 5 was `r avg_views_s5` million people.
